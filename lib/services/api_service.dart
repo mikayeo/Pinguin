@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pinguin/models/account.dart';
-import 'package:pinguin/providers/auth_provider.dart';
 
 class ApiService {
   final Dio _dio;
   final _storage = const FlutterSecureStorage();
-  static const String baseUrl = 'https://api.moneytransfer.com/v1'; // Replace with your actual API URL
+  static const String baseUrl = 'http://10.0.2.2:3000/api'; // For Android emulator
+  // static const String baseUrl = 'http://localhost:3000/api'; // For iOS simulator
 
   ApiService() : _dio = Dio(BaseOptions(baseUrl: baseUrl)) {
     _dio.interceptors.add(InterceptorsWrapper(
@@ -33,10 +33,10 @@ class ApiService {
     return await _storage.read(key: 'token');
   }
 
-  void _handleUnauthorized() {
+  void _handleUnauthorized() async {
     // Clear stored credentials
-    _storage.delete(key: 'token');
-    _storage.delete(key: 'userId');
+    await _storage.delete(key: 'token');
+    await _storage.delete(key: 'userId');
   }
 
   // Auth endpoints
@@ -68,7 +68,7 @@ class ApiService {
   // Account endpoints
   Future<Account> getAccount() async {
     try {
-      final response = await _dio.get('/account');
+      final response = await _dio.get('/accounts');
       return Account.fromJson(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e);
