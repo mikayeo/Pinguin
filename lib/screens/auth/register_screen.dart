@@ -11,18 +11,18 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _fullNameController.dispose();
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -31,9 +31,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _isLoading = true);
       try {
         await context.read<AuthProvider>().register(
-          _emailController.text.trim(),
+          _usernameController.text.trim(),
           _passwordController.text,
-          _fullNameController.text.trim(),
+          _phoneController.text.trim(),
         );
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
@@ -76,32 +76,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
                 TextFormField(
-                  controller: _fullNameController,
+                  controller: _usernameController,
                   decoration: const InputDecoration(
-                    labelText: 'Full Name',
+                    labelText: 'Username',
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your full name';
+                      return 'Please enter your username';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _emailController,
+                  controller: _phoneController,
                   decoration: const InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Phone Number',
                     border: OutlineInputBorder(),
                   ),
-                  keyboardType: TextInputType.emailAddress,
+                  keyboardType: TextInputType.phone,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
+                      return 'Please enter your phone number';
                     }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
+                    if (value.length < 8) {
+                      return 'Please enter a valid phone number';
                     }
                     return null;
                   },

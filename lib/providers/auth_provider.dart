@@ -13,9 +13,9 @@ class AuthProvider with ChangeNotifier {
   String? get token => _token;
   String? get userId => _userId;
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String username, String password) async {
     try {
-      final response = await _apiService.login(email, password);
+      final response = await _apiService.login(username, password);
       _token = response['token'] as String;
       _userId = response['userId'] as String;
       _isAuthenticated = true;
@@ -34,9 +34,9 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> register(String email, String password, String fullName) async {
+  Future<void> register(String username, String password, String phoneNumber) async {
     try {
-      final response = await _apiService.register(email, password, fullName);
+      final response = await _apiService.register(username, password, phoneNumber);
       _token = response['token'] as String;
       _userId = response['userId'] as String;
       _isAuthenticated = true;

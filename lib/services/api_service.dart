@@ -40,10 +40,10 @@ class ApiService {
   }
 
   // Auth endpoints
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(String username, String password) async {
     try {
       final response = await _dio.post('/auth/login', data: {
-        'email': email,
+        'username': username,
         'password': password,
       });
       return response.data;
@@ -52,12 +52,12 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> register(String email, String password, String fullName) async {
+  Future<Map<String, dynamic>> register(String username, String password, String phoneNumber) async {
     try {
       final response = await _dio.post('/auth/register', data: {
-        'email': email,
+        'username': username,
         'password': password,
-        'fullName': fullName,
+        'phoneNumber': phoneNumber,
       });
       return response.data;
     } on DioException catch (e) {

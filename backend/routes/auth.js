@@ -7,32 +7,29 @@ const { pool } = require('../config/database');
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, fullName } = req.body;
+    const { username, password, phoneNumber } = req.body;
 
-    // Check if user already exists
-    const [existingUsers] = await pool.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
+    // Validate required fields
+    if (!username || !password || !phoneNumber) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Check if username already exists
+    const [existing] = await pool.query(
+      'SELECT * FROM users WHERE username = ?',
+      [username]
     );
-
-    if (existingUsers.length > 0) {
-      return res.status(400).json({ message: 'User already exists' });
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'Username already exists' });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Insert into users table
     const [result] = await pool.query(
-      'INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)',
-      [email, hashedPassword, fullName]
-    );
-
-    // Create account for user
-    const accountNumber = generateAccountNumber();
-    await pool.query(
-      'INSERT INTO accounts (user_id, account_number, balance) VALUES (?, ?, ?)',
-      [result.insertId, accountNumber, 0]
+      'INSERT INTO users (username, password, PhoneNumber) VALUES (?, ?, ?)',
+      [username, hashedPassword, phoneNumber]
     );
 
     // Generate token
@@ -49,19 +46,21 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Error registering user' });
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error registering user' });
+    }
   }
 });
 
 // Login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    // Get user
+    // Get user by username
     const [users] = await pool.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
+      'SELECT * FROM users WHERE username = ?',
+      [username]
     );
 
     if (users.length === 0) {
