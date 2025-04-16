@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:pinguin/providers/account_provider.dart';
 import 'package:pinguin/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:pinguin/screens/home/qr_scanner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,8 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Future.microtask(() => context.read<AccountProvider>().fetchAccount());
   }
 
-  void _showSendMoneyDialog() {
-    final recipientController = TextEditingController();
+  void _showSendMoneyDialog({String? recipientPhone}) {
+    final recipientController = TextEditingController(text: recipientPhone);
     final amountController = TextEditingController();
 
     showDialog(
@@ -32,10 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
             TextField(
               controller: recipientController,
               decoration: const InputDecoration(
-                labelText: 'Recipient Account Number',
+                labelText: 'Recipient Phone Number',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: 16),
             TextField(
@@ -85,6 +86,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Text('Send'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showQRScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QRScannerScreen(
+          onQRCodeScanned: (phoneNumber) {
+            _showSendMoneyDialog(recipientPhone: phoneNumber);
+          },
+        ),
       ),
     );
   }
@@ -155,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          NumberFormat.currency(symbol: '\$').format(account.balance),
+                          '${NumberFormat.currency(symbol: '', decimalDigits: 0).format(account.balance)} FCFA',
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
@@ -163,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Account Number: ${account.accountNumber}',
+                          'Phone Number: ${account.phoneNumber}',
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ],
@@ -180,16 +194,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: const Text('Send Money'),
                     ),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        // TODO: Implement request money functionality
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Request money feature coming soon'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.request_page),
-                      label: const Text('Request Money'),
+                      onPressed: _showQRScanner,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Scan'),
                     ),
                   ],
                 ),

@@ -5,99 +5,107 @@ const auth = require('../middleware/auth');
 
 // Send money
 router.post('/send', auth, async (req, res) => {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-
-    const { recipientAccountNumber, amount } = req.body;
+    const { recipientPhone, amount } = req.body;
+    const senderId = req.user.userId;
 
     // Get sender's account
-    const [senderAccounts] = await connection.query(
-      'SELECT * FROM accounts WHERE user_id = ?',
-      [req.user.userId]
+    const [senderAccounts] = await pool.query(
+      `SELECT a.*, u.phoneNumber 
+       FROM accounts a 
+       JOIN users u ON a.user_id = u.id 
+       WHERE a.user_id = ?`,
+      [senderId]
     );
 
     if (senderAccounts.length === 0) {
-      throw new Error('Sender account not found');
+      return res.status(404).json({ message: 'Sender account not found' });
     }
 
     const senderAccount = senderAccounts[0];
 
-    // Check sufficient balance
+    // Check if sender has sufficient balance
     if (senderAccount.balance < amount) {
-      throw new Error('Insufficient funds');
+      return res.status(400).json({ message: 'Insufficient funds' });
     }
 
     // Get recipient's account
-    const [recipientAccounts] = await connection.query(
-      'SELECT * FROM accounts WHERE account_number = ?',
-      [recipientAccountNumber]
+    const [recipientAccounts] = await pool.query(
+      `SELECT a.*, u.phoneNumber 
+       FROM accounts a 
+       JOIN users u ON a.user_id = u.id 
+       WHERE u.phoneNumber = ?`,
+      [recipientPhone]
     );
 
     if (recipientAccounts.length === 0) {
-      throw new Error('Recipient account not found');
+      return res.status(404).json({ message: 'Recipient account not found' });
     }
 
     const recipientAccount = recipientAccounts[0];
 
-    // Update balances
-    await connection.query(
-      'UPDATE accounts SET balance = balance - ? WHERE id = ?',
-      [amount, senderAccount.id]
-    );
+    // Start transaction
+    await pool.query('START TRANSACTION');
 
-    await connection.query(
-      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
-      [amount, recipientAccount.id]
-    );
+    try {
+      // Update sender's balance
+      await pool.query(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [amount, senderAccount.id]
+      );
 
-    // Record transaction
-    await connection.query(
-      `INSERT INTO transactions 
-       (sender_account_id, recipient_account_id, amount, type) 
-       VALUES (?, ?, ?, 'transfer')`,
-      [senderAccount.id, recipientAccount.id, amount]
-    );
+      // Update recipient's balance
+      await pool.query(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [amount, recipientAccount.id]
+      );
 
-    await connection.commit();
-    res.json({ message: 'Transfer successful' });
+      // Record transaction
+      await pool.query(
+        'INSERT INTO transactions (sender_phone, recipient_phone, amount, type) VALUES (?, ?, ?, ?)',
+        [senderAccount.phoneNumber, recipientAccount.phoneNumber, amount, 'transfer']
+      );
+
+      await pool.query('COMMIT');
+      res.json({ message: 'Money sent successfully' });
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
-    await connection.rollback();
-    console.error('Transfer error:', error);
-    res.status(400).json({ message: error.message });
-  } finally {
-    connection.release();
+    console.error('Send money error:', error);
+    res.status(500).json({ message: 'Error sending money' });
   }
 });
 
 // Get transaction history
 router.get('/history', auth, async (req, res) => {
   try {
-    const [accounts] = await pool.query(
-      'SELECT id FROM accounts WHERE user_id = ?',
-      [req.user.userId]
+    const userId = req.user.userId;
+
+    // Get user's phone number
+    const [users] = await pool.query(
+      'SELECT phoneNumber FROM users WHERE id = ?',
+      [userId]
     );
 
-    if (accounts.length === 0) {
-      return res.status(404).json({ message: 'Account not found' });
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    const accountId = accounts[0].id;
+    const phoneNumber = users[0].phoneNumber;
 
+    // Get transactions
     const [transactions] = await pool.query(
       `SELECT t.*, 
-              sa.account_number as sender_account_number,
-              ra.account_number as recipient_account_number,
-              su.full_name as sender_name,
-              ru.full_name as recipient_name
+              CASE 
+                WHEN t.sender_phone = ? THEN 'sent'
+                WHEN t.recipient_phone = ? THEN 'received'
+              END as type
        FROM transactions t
-       JOIN accounts sa ON t.sender_account_id = sa.id
-       JOIN accounts ra ON t.recipient_account_id = ra.id
-       JOIN users su ON sa.user_id = su.id
-       JOIN users ru ON ra.user_id = ru.id
-       WHERE t.sender_account_id = ? OR t.recipient_account_id = ?
+       WHERE t.sender_phone = ? OR t.recipient_phone = ?
        ORDER BY t.created_at DESC`,
-      [accountId, accountId]
+      [phoneNumber, phoneNumber, phoneNumber, phoneNumber]
     );
 
     res.json(transactions);

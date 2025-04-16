@@ -75,10 +75,10 @@ class ApiService {
     }
   }
 
-  Future<void> sendMoney(String recipientAccountNumber, double amount) async {
+  Future<void> sendMoney(String recipientPhone, double amount) async {
     try {
       await _dio.post('/transactions/send', data: {
-        'recipientAccountNumber': recipientAccountNumber,
+        'recipientPhone': recipientPhone,
         'amount': amount,
       });
     } on DioException catch (e) {
@@ -86,10 +86,10 @@ class ApiService {
     }
   }
 
-  Future<void> receiveMoney(String senderAccountNumber, double amount) async {
+  Future<void> receiveMoney(String senderPhone, double amount) async {
     try {
       await _dio.post('/transactions/receive', data: {
-        'senderAccountNumber': senderAccountNumber,
+        'senderPhone': senderPhone,
         'amount': amount,
       });
     } on DioException catch (e) {

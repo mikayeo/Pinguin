@@ -7,22 +7,22 @@ class AuthProvider with ChangeNotifier {
   final _apiService = ApiService();
   bool _isAuthenticated = false;
   String? _token;
-  String? _userId;
+  int? _userId;
 
   bool get isAuthenticated => _isAuthenticated;
   String? get token => _token;
-  String? get userId => _userId;
+  int? get userId => _userId;
 
   Future<void> login(String username, String password) async {
     try {
       final response = await _apiService.login(username, password);
       _token = response['token'] as String;
-      _userId = response['userId'] as String;
+      _userId = int.parse(response['userId'].toString());
       _isAuthenticated = true;
       
       // Store credentials securely
       await _storage.write(key: 'token', value: _token);
-      await _storage.write(key: 'userId', value: _userId);
+      await _storage.write(key: 'userId', value: _userId.toString());
       
       notifyListeners();
     } catch (e) {
@@ -38,12 +38,12 @@ class AuthProvider with ChangeNotifier {
     try {
       final response = await _apiService.register(username, password, phoneNumber);
       _token = response['token'] as String;
-      _userId = response['userId'] as String;
+      _userId = int.parse(response['userId'].toString());
       _isAuthenticated = true;
       
       // Store credentials securely
       await _storage.write(key: 'token', value: _token);
-      await _storage.write(key: 'userId', value: _userId);
+      await _storage.write(key: 'userId', value: _userId.toString());
       
       notifyListeners();
     } catch (e) {
@@ -66,7 +66,8 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> checkAuthStatus() async {
     _token = await _storage.read(key: 'token');
-    _userId = await _storage.read(key: 'userId');
+    final storedUserId = await _storage.read(key: 'userId');
+    _userId = storedUserId != null ? int.parse(storedUserId) : null;
     _isAuthenticated = _token != null && _userId != null;
     notifyListeners();
   }

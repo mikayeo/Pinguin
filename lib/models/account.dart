@@ -1,51 +1,51 @@
 class Account {
-  final String id;
+  final int id;
   final String fullName;
   final String email;
   final double balance;
-  final String accountNumber;
+  final String phoneNumber;
 
   Account({
     required this.id,
     required this.fullName,
     required this.email,
     required this.balance,
-    required this.accountNumber,
+    required this.phoneNumber,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
     return Account(
-      id: json['id'] as String,
-      fullName: json['fullName'] as String,
+      id: json['id'] as int,
+      fullName: json['full_name'] as String,
       email: json['email'] as String,
-      balance: (json['balance'] as num).toDouble(),
-      accountNumber: json['accountNumber'] as String,
+      balance: double.parse(json['balance'].toString()),
+      phoneNumber: json['phone_number'] as String,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fullName': fullName,
+      'full_name': fullName,
       'email': email,
       'balance': balance,
-      'accountNumber': accountNumber,
+      'phone_number': phoneNumber,
     };
   }
 
   Account copyWith({
-    String? id,
+    int? id,
     String? fullName,
     String? email,
     double? balance,
-    String? accountNumber,
+    String? phoneNumber,
   }) {
     return Account(
       id: id ?? this.id,
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
       balance: balance ?? this.balance,
-      accountNumber: accountNumber ?? this.accountNumber,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
     );
   }
 } 

@@ -9,6 +9,8 @@ module.exports = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Parse userId to integer
+    decoded.userId = parseInt(decoded.userId);
     req.user = decoded;
     next();
   } catch (error) {

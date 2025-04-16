@@ -32,16 +32,22 @@ router.post('/register', async (req, res) => {
       [username, hashedPassword, phoneNumber]
     );
 
+    // Create account for the user
+    await pool.query(
+      'INSERT INTO accounts (user_id, email, password, full_name, balance) VALUES (?, ?, ?, ?, ?)',
+      [result.insertId, username, hashedPassword, username, 0.00]
+    );
+
     // Generate token
     const token = jwt.sign(
-      { userId: result.insertId },
+      { userId: result.insertId.toString() },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.status(201).json({
       token,
-      userId: result.insertId,
+      userId: result.insertId.toString(),
       message: 'User registered successfully'
     });
   } catch (error) {
@@ -77,14 +83,14 @@ router.post('/login', async (req, res) => {
 
     // Generate token
     const token = jwt.sign(
-      { userId: user.id },
+      { userId: user.id.toString() },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.json({
       token,
-      userId: user.id,
+      userId: user.id.toString(),
       message: 'Login successful'
     });
   } catch (error) {
