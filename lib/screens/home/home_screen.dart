@@ -4,6 +4,7 @@ import 'package:pinguin/providers/account_provider.dart';
 import 'package:pinguin/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pinguin/screens/home/qr_scanner_screen.dart';
+import 'package:pinguin/screens/home/transaction_history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,7 +17,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<AccountProvider>().fetchAccount());
+    // Always fetch fresh account data when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AccountProvider>().fetchAccount();
+    });
   }
 
   void _showSendMoneyDialog({String? recipientPhone}) {
@@ -56,7 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final amount = double.tryParse(amountController.text);
+              print('DEBUG: Raw amount text: ${amountController.text}');
+              final amount = double.tryParse(amountController.text.trim());
+              print('DEBUG: Parsed amount: $amount');
               if (amount == null || amount <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a valid amount')),
@@ -65,22 +71,100 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               try {
-                await context.read<AccountProvider>().sendMoney(
+                final accountProvider = context.read<AccountProvider>();
+                final currentBalance = accountProvider.balance;
+                
+                if (amount > currentBalance) {
+                  throw Exception('Insufficient funds. Available balance: ${NumberFormat.currency(symbol: '', decimalDigits: 0).format(currentBalance)} FCFA');
+                }
+
+                // Show loading dialog
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(child: CircularProgressIndicator()),
+                );
+
+                // Calculate new balance
+                final newBalance = currentBalance - amount;
+
+                // Send money
+                await accountProvider.sendMoney(
                   recipientController.text,
                   amount,
                 );
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Money sent successfully')),
-                  );
-                }
+
+                if (!mounted) return;
+
+                // Close loading dialog
+                Navigator.pop(context);
+
+                // Show success dialog
+                await showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Row(
+                      children: const [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 30,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Success!'),
+                      ],
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Successfully sent ${NumberFormat.currency(symbol: '', decimalDigits: 0).format(amount)} FCFA'),
+                        Text('To: ${recipientController.text}'),
+                        const SizedBox(height: 16),
+                        Text(
+                          'New balance: ${NumberFormat.currency(symbol: '', decimalDigits: 0).format(newBalance)} FCFA',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          // Navigate to fresh home screen
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const HomeScreen(),
+                            ),
+                            (route) => false, // Remove all previous routes
+                          );
+                        },
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                );
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString())),
-                  );
-                }
+                if (!mounted) return;
+
+                // Close loading dialog if it's showing
+                Navigator.of(context).popUntil((route) => route.isFirst);
+
+                // Show error dialog
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Error'),
+                    content: Text(e.toString()),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
               }
             },
             child: const Text('Send'),
@@ -185,18 +269,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                Column(
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: _showSendMoneyDialog,
-                      icon: const Icon(Icons.send),
-                      label: const Text('Send Money'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _showSendMoneyDialog,
+                          icon: const Icon(Icons.send),
+                          label: const Text('Send Money'),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _showQRScanner,
+                          icon: const Icon(Icons.qr_code_scanner),
+                          label: const Text('Scan'),
+                        ),
+                      ],
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _showQRScanner,
-                      icon: const Icon(Icons.qr_code_scanner),
-                      label: const Text('Scan'),
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const TransactionHistoryScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.history),
+                      label: const Text('View Transaction History'),
                     ),
                   ],
                 ),

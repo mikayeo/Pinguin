@@ -16,6 +16,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _isLoading = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -27,26 +28,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
+    // Prevent multiple submissions
+    if (_isLoading || _isSubmitting) return;
+
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _isSubmitting = true;
+      });
+
       try {
         await context.read<AuthProvider>().register(
           _usernameController.text.trim(),
           _passwordController.text,
           _phoneController.text.trim(),
         );
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
+
+        if (!mounted) return;
+
+        // Clear form after successful registration
+        _usernameController.clear();
+        _passwordController.clear();
+        _confirmPasswordController.clear();
+        _phoneController.clear();
+
+        Navigator.pushReplacementNamed(context, '/home');
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString())),
-          );
-        }
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString(),
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       } finally {
         if (mounted) {
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            _isSubmitting = false;
+          });
         }
       }
     }
@@ -144,10 +169,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: (_isLoading || _isSubmitting) ? null : _register,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48),
+                    disabledBackgroundColor: Colors.grey[300],
+                  ),
                   child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Register'),
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Register',
+                          style: TextStyle(fontSize: 16),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 TextButton(

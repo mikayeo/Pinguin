@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QRScannerScreen extends StatefulWidget {
   final Function(String) onQRCodeScanned;
@@ -14,8 +14,7 @@ class QRScannerScreen extends StatefulWidget {
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
+  MobileScannerController? controller;
 
   @override
   void dispose() {
@@ -33,16 +32,15 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         children: [
           Expanded(
             flex: 5,
-            child: QRView(
-              key: qrKey,
-              onQRViewCreated: _onQRViewCreated,
-              overlay: QrScannerOverlayShape(
-                borderColor: Theme.of(context).primaryColor,
-                borderRadius: 10,
-                borderLength: 30,
-                borderWidth: 10,
-                cutOutSize: MediaQuery.of(context).size.width * 0.8,
-              ),
+            child: MobileScanner(
+              controller: MobileScannerController(),
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                  widget.onQRCodeScanned(barcodes.first.rawValue!);
+                  Navigator.pop(context);
+                }
+              },
             ),
           ),
           Expanded(
@@ -58,14 +56,4 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       ),
     );
   }
-
-  void _onQRViewCreated(QRViewController controller) {
-    this.controller = controller;
-    controller.scannedDataStream.listen((scanData) {
-      if (scanData.code != null) {
-        widget.onQRCodeScanned(scanData.code!);
-        Navigator.pop(context);
-      }
-    });
-  }
-} 
+}

@@ -6,6 +6,7 @@ class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   final _apiService = ApiService();
   bool _isAuthenticated = false;
+  bool _isRegistering = false;
   String? _token;
   int? _userId;
 
@@ -13,9 +14,23 @@ class AuthProvider with ChangeNotifier {
   String? get token => _token;
   int? get userId => _userId;
 
+  bool _isLoggingIn = false;
+
   Future<void> login(String username, String password) async {
+    if (_isLoggingIn) {
+      throw Exception('Login already in progress');
+    }
+
     try {
+      _isLoggingIn = true;
+      notifyListeners();
+
       final response = await _apiService.login(username, password);
+      
+      if (response['token'] == null || response['userId'] == null) {
+        throw Exception('Invalid server response');
+      }
+
       _token = response['token'] as String;
       _userId = int.parse(response['userId'].toString());
       _isAuthenticated = true;
@@ -23,20 +38,32 @@ class AuthProvider with ChangeNotifier {
       // Store credentials securely
       await _storage.write(key: 'token', value: _token);
       await _storage.write(key: 'userId', value: _userId.toString());
-      
-      notifyListeners();
     } catch (e) {
       _isAuthenticated = false;
       _token = null;
       _userId = null;
-      notifyListeners();
       rethrow;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
     }
   }
 
   Future<void> register(String username, String password, String phoneNumber) async {
+    if (_isRegistering) {
+      throw Exception('Registration already in progress');
+    }
+
     try {
+      _isRegistering = true;
+      notifyListeners();
+
       final response = await _apiService.register(username, password, phoneNumber);
+      
+      if (response['token'] == null || response['userId'] == null) {
+        throw Exception('Invalid server response');
+      }
+
       _token = response['token'] as String;
       _userId = int.parse(response['userId'].toString());
       _isAuthenticated = true;
@@ -44,14 +71,14 @@ class AuthProvider with ChangeNotifier {
       // Store credentials securely
       await _storage.write(key: 'token', value: _token);
       await _storage.write(key: 'userId', value: _userId.toString());
-      
-      notifyListeners();
     } catch (e) {
       _isAuthenticated = false;
       _token = null;
       _userId = null;
-      notifyListeners();
       rethrow;
+    } finally {
+      _isRegistering = false;
+      notifyListeners();
     }
   }
 

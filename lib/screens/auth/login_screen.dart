@@ -14,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -23,25 +24,46 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    if (_isLoading || _isSubmitting) return;
+
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _isSubmitting = true;
+      });
+
       try {
         await context.read<AuthProvider>().login(
           _usernameController.text.trim(),
           _passwordController.text,
         );
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
+
+        if (!mounted) return;
+
+        // Clear form after successful login
+        _usernameController.clear();
+        _passwordController.clear();
+
+        Navigator.pushReplacementNamed(context, '/home');
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString())),
-          );
-        }
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString(),
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       } finally {
         if (mounted) {
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            _isSubmitting = false;
+          });
         }
       }
     }
@@ -101,10 +123,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _login,
+                  onPressed: (_isLoading || _isSubmitting) ? null : _login,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48),
+                    disabledBackgroundColor: Colors.grey[300],
+                  ),
                   child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Login'),
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Login',
+                          style: TextStyle(fontSize: 16),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 TextButton(

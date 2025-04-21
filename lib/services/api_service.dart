@@ -5,10 +5,20 @@ import 'package:pinguin/models/account.dart';
 class ApiService {
   final Dio _dio;
   final _storage = const FlutterSecureStorage();
-  static const String baseUrl = 'http://10.0.2.2:3000/api'; // For Android emulator
-  // static const String baseUrl = 'http://localhost:3000/api'; // For iOS simulator
+  // Use Android emulator's special localhost address
+  static const String baseUrl = 'http://10.0.2.2:3000/api';
 
-  ApiService() : _dio = Dio(BaseOptions(baseUrl: baseUrl)) {
+  ApiService() : _dio = Dio(BaseOptions(
+    baseUrl: baseUrl,
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
+    sendTimeout: const Duration(seconds: 30),
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+  )) {
+    // Initialize interceptors after base URL is set
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         // Add auth token to requests if available
@@ -52,13 +62,43 @@ class ApiService {
     }
   }
 
+  // Track the last registration attempt time
+  DateTime? _lastRegistrationAttempt;
+
   Future<Map<String, dynamic>> register(String username, String password, String phoneNumber) async {
+    // Prevent rapid successive registration attempts
+    final now = DateTime.now();
+    if (_lastRegistrationAttempt != null) {
+      final difference = now.difference(_lastRegistrationAttempt!);
+      if (difference.inSeconds < 3) {
+        throw Exception('Please wait a moment before trying again');
+      }
+    }
+    _lastRegistrationAttempt = now;
+
     try {
-      final response = await _dio.post('/auth/register', data: {
-        'username': username,
-        'password': password,
-        'phoneNumber': phoneNumber,
-      });
+      final response = await _dio.post(
+        '/auth/register',
+        data: {
+          'username': username,
+          'password': password,
+          'phoneNumber': phoneNumber,
+        },
+        options: Options(
+          // Prevent retries on failure
+          followRedirects: false,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode == 409) {
+        throw Exception('Username or phone number already exists');
+      }
+      
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Registration failed. Please try again.');
+      }
+
       return response.data;
     } on DioException catch (e) {
       throw _handleDioError(e);
@@ -98,6 +138,9 @@ class ApiService {
   }
 
   Exception _handleDioError(DioException error) {
+    // Clear the last registration attempt on error
+    _lastRegistrationAttempt = null;
+
     if (error.response?.data != null && error.response?.data['message'] != null) {
       return Exception(error.response?.data['message']);
     }
@@ -106,13 +149,30 @@ class ApiService {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return Exception('Connection timeout. Please check your internet connection.');
+        return Exception(
+          'Unable to connect to server. Please check if:\n'
+          '1. Your internet connection is working\n'
+          '2. The backend server is running\n'
+          '3. You are using the correct server address'
+        );
       case DioExceptionType.badResponse:
-        return Exception('Server error. Please try again later.');
+        final statusCode = error.response?.statusCode;
+        if (statusCode == 409) {
+          return Exception('Username or phone number already exists');
+        } else if (statusCode == 400) {
+          return Exception('Invalid input. Please check your details.');
+        }
+        return Exception('Server error (${statusCode ?? 'unknown'}). Please try again later.');
       case DioExceptionType.cancel:
         return Exception('Request cancelled.');
       default:
-        return Exception('An unexpected error occurred. Please try again.');
+        if (error.message?.contains('SocketException') ?? false) {
+          return Exception(
+            'Network error: Could not connect to server.\n'
+            'Please ensure the backend server is running.'
+          );
+        }
+        return Exception('Network error. Please check your connection and try again.');
     }
   }
-} 
+}
