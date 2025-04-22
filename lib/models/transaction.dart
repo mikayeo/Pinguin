@@ -1,23 +1,35 @@
 class Transaction {
-  final String recipientPhone;
+  final int? id;
+  final String sender_phone;
+  final String recipient_phone;
   final double amount;
-  final DateTime date;
+  final String type;
+  final DateTime createdAt;
 
   Transaction({
-    required this.recipientPhone,
+    this.id,
+    required this.sender_phone,
+    required this.recipient_phone,
     required this.amount,
-    required this.date,
+    required this.type,
+    required this.createdAt,
   });
 
   Map<String, dynamic> toJson() => {
-    'recipientPhone': recipientPhone,
+    if (id != null) 'id': id,
+    'sender_phone': sender_phone,
+    'recipient_phone': recipient_phone,
     'amount': amount,
-    'date': date.toIso8601String(),
+    'type': type,
+    'created_at': createdAt.toIso8601String(),
   };
 
   factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
-    recipientPhone: json['recipientPhone'],
-    amount: json['amount'],
-    date: DateTime.parse(json['date']),
+    id: json['id'],
+    sender_phone: json['sender_phone'],
+    recipient_phone: json['recipient_phone'],
+    amount: double.parse(json['amount'].toString()),
+    type: json['type'],
+    createdAt: DateTime.parse(json['created_at']),
   );
 }

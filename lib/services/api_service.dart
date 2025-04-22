@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pinguin/models/account.dart';
 
+import '../models/transaction.dart';
+
 class ApiService {
   final Dio _dio;
   final _storage = const FlutterSecureStorage();
@@ -115,23 +117,62 @@ class ApiService {
     }
   }
 
-  Future<void> sendMoney(String recipientPhone, double amount) async {
+  Future<List<Transaction>> getTransactions() async {
     try {
-      await _dio.post('/transactions/send', data: {
-        'recipientPhone': recipientPhone,
-        'amount': amount,
-      });
+      final response = await _dio.get('/transactions/history');
+      if (response.data is List) {
+        return (response.data as List)
+            .map((json) => Transaction.fromJson(json))
+            .toList();
+      }
+      return [];
     } on DioException catch (e) {
       throw _handleDioError(e);
     }
   }
 
-  Future<void> receiveMoney(String senderPhone, double amount) async {
+  Future<Transaction> sendMoney(String sender_phone, String recipient_phone, double amount, String type) async {
     try {
-      await _dio.post('/transactions/receive', data: {
-        'senderPhone': senderPhone,
+      print('DEBUG: Sending money with recipient_phone: "$recipient_phone"');
+      
+      // Send the transaction
+      final response = await _dio.post('/transactions/send', data: {
+        'sender_phone': sender_phone,
+        'recipient_phone': recipient_phone.trim(), // Add trim to remove any whitespace
+        'amount': amount,
+        'type': type,
+      });
+
+      // Parse response
+      final transaction = Transaction.fromJson(response.data['transaction']);
+      return transaction;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw 'Recipient not found';
+      } else if (e.response?.statusCode == 400) {
+        throw 'Insufficient funds';
+      } else {
+        throw 'Error sending money: ${e.message}';
+      }
+    } catch (e) {
+      throw 'Error sending money: $e';
+    }
+  }
+
+  Future<Transaction> receiveMoney(String sender_phone, double amount) async {
+    try {
+      // Send the transaction
+      final response = await _dio.post('/transactions/receive', data: {
+        'sender_phone': sender_phone,
         'amount': amount,
       });
+
+      // The API should return the created transaction
+      if (response.data['transaction'] != null) {
+        return Transaction.fromJson(response.data['transaction']);
+      } else {
+        throw Exception('Invalid transaction response from server');
+      }
     } on DioException catch (e) {
       throw _handleDioError(e);
     }

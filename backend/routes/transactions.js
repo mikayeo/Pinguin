@@ -6,8 +6,11 @@ const auth = require('../middleware/auth');
 // Send money
 router.post('/send', auth, async (req, res) => {
   try {
-    const { recipientPhone, amount } = req.body;
+    const { recipient_phone, amount } = req.body;
     const senderId = req.user.userId;
+
+    // Clean phone numbers
+    const cleanRecipientPhone = recipient_phone.trim();
 
     // Get sender's account
     const [senderAccounts] = await pool.query(
@@ -29,45 +32,73 @@ router.post('/send', auth, async (req, res) => {
       return res.status(400).json({ message: 'Insufficient funds' });
     }
 
-    // Get recipient's account
-    const [recipientAccounts] = await pool.query(
-      `SELECT a.*, u.phoneNumber 
-       FROM accounts a 
-       JOIN users u ON a.user_id = u.id 
-       WHERE u.phoneNumber = ?`,
-      [recipientPhone]
+    // Check if recipient exists
+    console.log('Looking for recipient:', cleanRecipientPhone);
+    console.log('Recipient phone type:', typeof cleanRecipientPhone);
+    console.log('Recipient phone length:', cleanRecipientPhone.length);
+    
+    // Get all users first to debug
+    const [allUsers] = await pool.query('SELECT id, username, phoneNumber FROM users');
+    console.log('All users:', JSON.stringify(allUsers, null, 2));
+    
+    const [recipients] = await pool.query(
+      'SELECT * FROM users WHERE phoneNumber = ?',
+      [cleanRecipientPhone]
     );
+    console.log('Found recipients:', JSON.stringify(recipients, null, 2));
 
-    if (recipientAccounts.length === 0) {
-      return res.status(404).json({ message: 'Recipient account not found' });
+    if (recipients.length === 0) {
+      console.log('No recipient found with phone:', cleanRecipientPhone);
+      return res.status(404).json({ message: 'Recipient not found' });
     }
-
-    const recipientAccount = recipientAccounts[0];
 
     // Start transaction
     await pool.query('START TRANSACTION');
 
     try {
+      // Record transaction first
+      const [result] = await pool.query(
+        'INSERT INTO transactions (sender_phone, recipient_phone, amount, type) VALUES (?, ?, ?, ?)',
+        [senderAccount.phoneNumber, cleanRecipientPhone, amount, 'transfer']
+      );
+
       // Update sender's balance
-      await pool.query(
+      const [senderUpdate] = await pool.query(
         'UPDATE accounts SET balance = balance - ? WHERE id = ?',
         [amount, senderAccount.id]
       );
 
+      if (senderUpdate.affectedRows === 0) {
+        throw new Error('Failed to update sender balance');
+      }
+
       // Update recipient's balance
-      await pool.query(
-        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
-        [amount, recipientAccount.id]
+      const [recipientUpdate] = await pool.query(
+        'UPDATE accounts SET balance = balance + ? WHERE user_id = ?',
+        [amount, recipients[0].id]
       );
 
-      // Record transaction
-      await pool.query(
-        'INSERT INTO transactions (sender_phone, recipient_phone, amount, type) VALUES (?, ?, ?, ?)',
-        [senderAccount.phoneNumber, recipientAccount.phoneNumber, amount, 'transfer']
+      if (recipientUpdate.affectedRows === 0) {
+        throw new Error('Failed to update recipient balance');
+      }
+
+      // Get the updated transaction record
+      const [transactions] = await pool.query(
+        `SELECT t.*, 
+                t.sender_phone,
+                t.recipient_phone
+         FROM transactions t
+         WHERE t.id = ?`,
+        [result.insertId]
       );
 
       await pool.query('COMMIT');
-      res.json({ message: 'Money sent successfully' });
+      
+      // Return the transaction details
+      res.json({
+        message: 'Money sent successfully',
+        transaction: transactions[0]
+      });
     } catch (error) {
       await pool.query('ROLLBACK');
       throw error;
@@ -98,14 +129,22 @@ router.get('/history', auth, async (req, res) => {
     // Get transactions
     const [transactions] = await pool.query(
       `SELECT t.*, 
+              u1.phoneNumber as sender_phone,
+              u2.phoneNumber as recipient_phone,
               CASE 
-                WHEN t.sender_phone = ? THEN 'sent'
-                WHEN t.recipient_phone = ? THEN 'received'
-              END as type
+                WHEN t.sender_phone = ? THEN -t.amount
+                WHEN t.recipient_phone = ? THEN t.amount
+              END as amount_with_sign,
+              CASE 
+                WHEN t.sender_phone = ? THEN 'send'
+                WHEN t.recipient_phone = ? THEN 'receive'
+              END as transaction_type
        FROM transactions t
+       JOIN users u1 ON t.sender_phone = u1.phoneNumber
+       JOIN users u2 ON t.recipient_phone = u2.phoneNumber
        WHERE t.sender_phone = ? OR t.recipient_phone = ?
        ORDER BY t.created_at DESC`,
-      [phoneNumber, phoneNumber, phoneNumber, phoneNumber]
+      [phoneNumber, phoneNumber, phoneNumber, phoneNumber, phoneNumber, phoneNumber]
     );
 
     res.json(transactions);

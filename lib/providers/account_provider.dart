@@ -9,23 +9,31 @@ class AccountProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  // Use shared preferences to persist balance and transactions
-  static const String _balanceKey = 'account_balance';
-  static double? _cachedBalance;
-  static List<Transaction> _transactions = [];
+  List<Transaction> _transactions = [];
 
-  Account? get account => _account == null ? null : _account!.copyWith(balance: balance);
+  Account? get account => _account;
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<Transaction> get transactions => List.unmodifiable(_transactions);
 
-  // Get balance from cache or default to 100000
-  double get balance => _cachedBalance ?? 100000;
+  // Get balance from account or default to 0
+  double get balance => _account?.balance ?? 0;
 
-  // Update balance and persist it
-  Future<void> _updateBalance(double newBalance) async {
-    _cachedBalance = newBalance;
-    notifyListeners();
+  // Load transactions from API
+  Future<void> _loadTransactions() async {
+    try {
+      final transactions = await _apiService.getTransactions();
+      _transactions = transactions;
+      notifyListeners();
+    } catch (e) {
+      print('Error loading transactions: $e');
+    }
+  }
+
+  // Update account data from API
+  Future<void> _updateAccount() async {
+    await fetchAccount();
+    await _loadTransactions();
   }
 
   // Add a new transaction to history
@@ -52,7 +60,7 @@ class AccountProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendMoney(String recipientAccountNumber, double amount) async {
+  Future<void> sendMoney(String sender_phone, String recipient_phone, double amount, String type) async {
     if (_account == null) return;
     if (amount <= 0) throw Exception('Amount must be greater than 0');
     
@@ -61,37 +69,33 @@ class AccountProvider with ChangeNotifier {
       throw Exception('Insufficient funds. Available balance: $currentBalance FCFA');
     }
 
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
     try {
-      // Send money first
-      await _apiService.sendMoney(recipientAccountNumber, amount);
-      
-      // Update balance after successful send
-      final newBalance = currentBalance - amount;
-      await _updateBalance(newBalance);
-      
-      // Add transaction to history
-      _addTransaction(Transaction(
-        recipientPhone: recipientAccountNumber,
-        amount: amount,
-        date: DateTime.now(),
-      ));
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
 
-      // Update account with new balance
-      if (_account != null) {
-        _account = _account!.copyWith(balance: newBalance);
-      }
-      
+      // Send money via API
+      final transaction = await _apiService.sendMoney(
+        sender_phone,
+        recipient_phone,
+        amount,
+        type
+      );
+
+      // Add the new transaction to the list
+      _transactions = [transaction, ..._transactions];
+
+      // Update account data
+      await _updateAccount();
+
+      _isLoading = false;
       _error = null;
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-    } finally {
       _isLoading = false;
+      _error = e.toString();
       notifyListeners();
+      rethrow;
     }
   }
 
@@ -104,9 +108,16 @@ class AccountProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _apiService.receiveMoney(senderAccountNumber, amount);
-      // Refresh account data after successful transaction
+      // Receive money and get transaction record
+      final transaction = await _apiService.receiveMoney(senderAccountNumber, amount);
+      
+      // Fetch updated account data
       await fetchAccount();
+      
+      // Add transaction to history
+      _addTransaction(transaction);
+      
+      _error = null;
     } catch (e) {
       _error = e.toString();
     } finally {

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:pinguin/providers/account_provider.dart';
 import 'package:pinguin/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pinguin/screens/home/qr_scanner_screen.dart';
 import 'package:pinguin/screens/home/transaction_history_screen.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +16,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
@@ -21,11 +25,24 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AccountProvider>().fetchAccount();
     });
+
+    // Set up periodic refresh every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) {
+        context.read<AccountProvider>().fetchAccount();
+      }
+    });
   }
 
   void _showSendMoneyDialog({String? recipientPhone}) {
+    final senderController = TextEditingController();
     final recipientController = TextEditingController(text: recipientPhone);
     final amountController = TextEditingController();
+    final typeController = TextEditingController(text: 'transfer');
+
+    // Get current user's phone number
+    final currentPhone = context.read<AccountProvider>().account?.phoneNumber ?? '';
+    senderController.text = currentPhone;
 
     showDialog(
       context: context,
@@ -34,6 +51,16 @@ class _HomeScreenState extends State<HomeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextField(
+              controller: senderController,
+              decoration: const InputDecoration(
+                labelText: 'Sender Phone Number',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.phone,
+              enabled: false, // Disable editing of sender's phone
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: recipientController,
               decoration: const InputDecoration(
@@ -51,6 +78,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: typeController,
+              decoration: const InputDecoration(
+                labelText: 'Type',
+                border: OutlineInputBorder(),
+              ),
+              enabled: false, // Disable editing of type
+            ),
           ],
         ),
         actions: [
@@ -63,9 +99,19 @@ class _HomeScreenState extends State<HomeScreen> {
               print('DEBUG: Raw amount text: ${amountController.text}');
               final amount = double.tryParse(amountController.text.trim());
               print('DEBUG: Parsed amount: $amount');
+              // Validate amount
               if (amount == null || amount <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a valid amount')),
+                );
+                return;
+              }
+
+              // Validate phone numbers
+              final recipientNumber = recipientController.text.trim();
+              if (recipientNumber.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter recipient phone number')),
                 );
                 return;
               }
@@ -88,10 +134,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Calculate new balance
                 final newBalance = currentBalance - amount;
 
+                print('DEBUG: Sending money from ${senderController.text.trim()} to $recipientNumber');
+                
                 // Send money
                 await accountProvider.sendMoney(
-                  recipientController.text,
+                  senderController.text.trim(),
+                  recipientNumber,
                   amount,
+                  typeController.text.trim(),
                 );
 
                 if (!mounted) return;
@@ -188,6 +238,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -243,20 +299,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          'Available Balance',
+                        Text(
+                          'Balance',
                           style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           '${NumberFormat.currency(symbol: '', decimalDigits: 0).format(account.balance)} FCFA',
                           style: const TextStyle(
-                            fontSize: 32,
+                            fontSize: 36,
                             fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        // QR Code Card
+                        Card(
+                          elevation: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: [
+                                QrImageView(
+                                  data: account.phoneNumber ?? '',
+                                  version: QrVersions.auto,
+                                  size: 150.0,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Scan to send money',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
